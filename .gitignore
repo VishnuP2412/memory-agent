@@ -1,3 +1,6 @@
 tests/
 .env
 .venv/
+__pycache__
+memory-agent-flow.drawio
+chroma_db/

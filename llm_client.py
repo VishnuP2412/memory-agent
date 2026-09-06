@@ -9,11 +9,13 @@ _client = OpenAI(
     api_key=os.environ["NVIDIA_API_KEY"],
 )
 
-def ask_llm(messages: list[dict], model: str = "meta/llama-3.1-8b-instruct") -> str:
+def ask_llm(messages: list[dict], model: str = "mistralai/mistral-nemotron") -> str:
     response = _client.chat.completions.create(
         model=model,
         messages=messages,
-        temperature=0.3,
-        max_tokens=1024,
+        temperature=0.6,
+        top_p=0.7,
+        max_tokens=4096,
+        stream=False
     )
     return response.choices[0].message.content
