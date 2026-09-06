@@ -4,7 +4,7 @@ import re
 RECENCY_HALF_LIFE_SECONDS = 60 * 60 * 24    #24Hours
 RELEVANCE_WEIGHT = 0.7
 RECENCY_WEIGHT = 0.3
-COMPACTION_THRESHOLD = 50   #The compaction will/should be triggered if there are above these many messages
+COMPACTION_THRESHOLD = 3   #The compaction will/should be triggered if there are above these many messages
 COMPACTION_FRACTION = 0.2
 
 def recency_score(timestamp: float) -> float:

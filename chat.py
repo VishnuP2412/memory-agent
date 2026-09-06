@@ -1,4 +1,5 @@
-from memory_store import add_memory, search_memories
+from retention import is_forget_command, should_compact, combined_score, compact_memories, recency_score
+from memory_store import add_memory, search_memories, get_all_memories, delete_memories
 from llm_client import ask_llm
 
 def build_context(query: str) -> str:
@@ -15,19 +16,49 @@ def main():
         if user_input.lower() == "exit":
             break
 
+        forget_topic = is_forget_command(user_input)
+        if forget_topic:
+            matches = search_memories(forget_topic, k=20)
+            ids_to_delete = [
+                mid for mid, doc, meta, dist in matches
+                if forget_topic.lower() in doc.lower() or dist < 0.35
+            ]
+            delete_memories(ids_to_delete)
+            print(f"Agent: Forgot memories related to '{forget_topic}'.\n")
+            continue
+
         context = build_context(user_input)
+
         system_prompt = "You are a helpful assistant with access to memory of past conversation."
         if context:
             system_prompt += "\n\n" + context
 
-        reply = ask_llm([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input},
-        ])
-        print(f"Agent: {reply}\n")
+        try:
+            reply = ask_llm([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ])
+            print(f"Agent: {reply}\n")
+        except Exception as e:
+            print(f"Agent: (had trouble reaching the model, try again — {e})\n")
+            continue
 
         add_memory(user_input, "user")
-        add_memory(reply, "assistant")
+        # add_memory(reply, "assistant")
+
+        all_mem = get_all_memories()
+        if should_compact(all_mem["ids"]):
+            scored = [
+                (mid, combined_score(meta["timestamp"],0.0))
+                for mid, meta in zip(all_mem["ids"], all_mem["metadatas"])
+            ]
+            scored.sort(key=lambda x: x[1])
+            low_score_ids = [mid for mid, _ in scored[:10]]  # lowest 10, or use your COMPACTION_FRACTION
+            low_score_texts = [doc for doc, mid in zip(all_mem["documents"], all_mem["ids"]) if mid in low_score_ids]
+
+            summary = compact_memories(low_score_texts, ask_llm)
+            delete_memories(low_score_ids)
+            add_memory(summary, "system")
 
 if __name__ == "__main__":
     main()
