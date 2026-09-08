@@ -5,13 +5,19 @@ import time
 
 load_dotenv()
 
-_client = OpenAI(
-    base_url="https://integrate.api.nvidia.com/v1",
-    api_key=os.environ["NVIDIA_API_KEY"],
-    timeout=20.0,
-)
+USE_LOCAL = True 
 
-def ask_llm(messages: list[dict], model: str = "mistralai/mistral-nemotron", retries: int = 2) -> str:
+if USE_LOCAL:
+    _client = OpenAI(base_url="http://172.22.144.1:11434/v1", api_key="ollama")
+    DEFAULT_MODEL = "llama3.2:3b"
+else:
+    _client = OpenAI(
+        base_url="https://integrate.api.nvidia.com/v1",
+        api_key=os.environ["NVIDIA_API_KEY"],
+    )
+    DEFAULT_MODEL = "mistralai/mistral-nemotron"
+
+def ask_llm(messages: list[dict], model: str = DEFAULT_MODEL, retries: int = 2) -> str:
     for attempt in range(retries + 1):
         try:
             response = _client.chat.completions.create(
