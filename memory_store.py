@@ -11,6 +11,9 @@ def embed(text: str) -> list[float]:
     return _embedder.encode(text).tolist()
 
 def add_memory(text: str, role: str) -> str:
+    existing = get_all_memories()["documents"]
+    if text in existing:
+        return None
     mem_id = str(uuid.uuid4())
     _collection.add(
         ids=[mem_id],
@@ -44,3 +47,10 @@ def update_memory(mem_id: str, new_text: str, metadata: dict):
         documents=[new_text],
         metadatas=[metadata],
     )
+
+def is_question(text: str) -> bool:
+    text = text.strip().lower()
+    if text.endswith('?'):
+        return True
+    starters = ('what', 'who', 'when', 'where', 'why', 'how', 'do ', 'does ', 'is ', 'are ', 'can ', 'could ', 'would ', 'should ')
+    return text.startswith(starters)

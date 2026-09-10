@@ -1,84 +1,84 @@
-# Memory Agent
+# Agentic Memory Assistant
 
-A small Python command-line assistant with persistent semantic memory. It
-implements a retrieval-augmented generation (RAG) loop:
+A CLI-based conversational agent with retrieval-augmented memory: it
+embeds and stores what you tell it, retrieves relevant past statements
+on each new turn, and supports explicit forgetting and compaction —
+built to understand how memory-augmented agents actually work, not to
+demo a finished product.
 
-1. Embed the user's message with `all-MiniLM-L6-v2`.
-2. Store user memories in a local ChromaDB collection.
-3. Retrieve semantically related memories before each response.
-4. Add that context to the prompt sent to the NVIDIA-hosted language model.
-5. Generate and print the assistant's reply.
+## Architecture
 
-The local `chroma_db/` directory makes the memory persistent between runs.
+- **Embeddings**: `sentence-transformers` (`all-MiniLM-L6-v2`) — small
+  and fast, chosen for short conversational memories over accuracy on
+  longer documents.
+- **Vector store**: Chroma, local and persistent — chosen over
+  pgvector for zero server setup under a tight timeline.
+- **LLM**: NVIDIA NIM API (`mistralai/mistral-nemotron`), OpenAI-
+  compatible endpoint. Ollama (local, `llama3.2:3b`) is supported as a
+  dev-time swap for faster iteration — see `USE_LOCAL` in
+  `llm_client.py` — but production always points at NIM.
+- **Interface**: CLI (`chat.py`).
 
-## Retention Policy
+## Retention policy — design decisions
 
-- **Recency half-life:** 24 hours. A memory's recency score decays to 0.5
-  after 24 hours.
-- **Relevance and recency weighting:** the combined score uses 0.7 relevance
-  and 0.3 recency. Relevance gets the larger weight because matching the
-  current question is the primary signal; recency still helps prefer fresher
-  memories when several are similarly relevant.
-- **Forget versus fading:** `/forget <topic>` is an explicit deletion request.
-  It searches for related memories and deletes matches. Ordinary memories are
-  not deleted just because they become old; they gradually receive a lower
-  recency score instead.
-- **Count-based compaction:** once the memory count is above 3, the lowest
-  scoring memories are summarized and replaced with one compact system memory.
-  A count threshold keeps the store bounded and prevents compaction from
-  running on every message.
+- **Recency**: exponential decay, 24-hour half-life. A memory is worth
+  half as much every 24 hours it goes unused.
+- **Relevance**: `1 / (1 + distance)`, converting Chroma's distance
+  metric into a 0–1 relevance score.
+- **Combined score**: `0.7 * relevance + 0.3 * recency`. Relevance is
+  weighted higher because the point of retrieval is surfacing what's
+  actually useful to the current query; recency breaks ties rather
+  than dominating.
+- **Compaction**: count-based — above 50 stored memories, the lowest-
+  scoring 20% are summarized via one LLM call and replaced with the
+  summary. Compaction ranks by recency only (no active query exists at
+  that point, so relevance isn't computable there).
+- **Forgetting — two-tier by design**: `/forget X` deletes only memories
+  containing the literal term or within a tight similarity threshold
+  (distance < 0.35) — precise, so forgetting one topic doesn't sweep up
+  loosely related ones. `forget everything about/related to X` uses a
+  looser threshold (distance < 0.9) to also catch near-paraphrases.
+  Verified against a three-fact test case: an unrelated fact (distance
+  1.83) and a near-paraphrase (distance 0.83) — narrow mode only
+  deletes the exact match, broad mode also removes the paraphrase, the
+  unrelated fact survives both.
 
-Assistant replies are deliberately never stored as memories. This was a real
-bug caught and fixed tonight: storing generated replies could feed a
-hallucination back into later prompts and compound it over time. Normal chat
-therefore stores user messages only; compaction summaries are the exception
-because they are explicitly generated as memory summaries.
+## Bugs found and fixed during development
 
-## Known Limitations
+- **Hallucination compounding**: originally, both user input and
+  assistant replies were stored as memories. The LLM sometimes
+  fabricates plausible-sounding details to keep a conversation going
+  (e.g. inventing a "trip to the Rocky Mountains" never mentioned) —
+  storing those replies let fabricated facts get retrieved and treated
+  as ground truth on later turns, compounding over time. Fixed by only
+  ever persisting user-stated input.
+- **Questions stored as facts**: user questions (e.g. "what outdoor
+  activities do I like?") were being embedded and stored identically
+  to statements, polluting future retrieval. Fixed with a heuristic
+  question filter (trailing `?` or common question-word start) that
+  skips storage for questions.
 
-Forget-command matching uses embedding similarity plus a distance threshold; on a small memory corpus this occasionally under- or over-matches, since semantically related statements (e.g. 'I like hiking' and '/forget hiking') can sit close together in embedding space. A production version would likely combine this with exact entity extraction rather than pure similarity.
+## Known limitations
 
-## API Failure Handling
-
-The NVIDIA API client uses a 20-second request timeout and retries failed
-requests twice, for up to three attempts total. If all attempts fail, it
-returns a temporary-unavailable message so the CLI can degrade gracefully
-instead of crashing. The chat loop also catches unexpected model errors and
-continues waiting for the next user message.
+- Question detection is heuristic, not semantic — a message like "I
+  like ramen, what do you think?" ends in `?` and would be skipped
+  entirely, losing the real fact it contains.
+- No duplicate-entry detection yet — repeating the same statement
+  twice creates two separate memories.
+- Forget's tight/loose thresholds (0.35 / 0.9) were tuned against one
+  test case, not a broad benchmark — they may need adjustment for
+  other topics or corpus sizes.
+- NIM's free tier was intermittently slow/unreliable during
+  development (multiple timeouts and 500s observed); a retry-with-
+  backoff wrapper is in place, but sustained outages will still
+  degrade the experience.
 
 ## Setup
 
-Create and activate a virtual environment, then install the dependencies:
-
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install chromadb sentence-transformers openai python-dotenv
-```
-
-Create a `.env` file in the project root:
-
-```env
-NVIDIA_API_KEY=your_api_key_here
-```
-
-## Run
-
-```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+echo "NVIDIA_API_KEY=your_key_here" > .env
 python chat.py
 ```
-
-Type `exit` to end the conversation.
-
-## Project Structure
-
-| File              | Purpose                                      |
-| ----------------- | -------------------------------------------- |
-| `chat.py`         | Command-line chat loop and context retrieval |
-| `memory_store.py` | Embeddings and ChromaDB persistence          |
-| `llm_client.py`   | NVIDIA API client and retry handling         |
-| `retention.py`    | Recency scoring and compaction helpers       |
-
-## License
-
-This project does not currently include a license.

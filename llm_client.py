@@ -5,7 +5,7 @@ import time
 
 load_dotenv()
 
-USE_LOCAL = True 
+USE_LOCAL = False
 
 if USE_LOCAL:
     _client = OpenAI(base_url="http://172.22.144.1:11434/v1", api_key="ollama")

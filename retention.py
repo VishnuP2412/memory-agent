@@ -19,13 +19,17 @@ def combined_score(timestamp: float, distance: float) -> float:
             + RECENCY_WEIGHT * recency_score(timestamp))
 
 def is_forget_command(user_input: str) -> str | None:
-    match = re.match(r"^/forget\s+(.+)$", user_input.strip(), re.IGNORECASE)
-    if match:
-        return match.group(1)
-    fallback = re.match(r"forget (?:that )?(?:i said |about )?(.+)", user_input.strip(), re.IGNORECASE)
+    text = user_input.strip()
+    broad = re.match(r'^/?forget (?:everything|anything)\s+(?:about|related to)\s+(.+)$', text, re.IGNORECASE)
+    if broad:
+        return broad.group(1), True
+    narrow = re.match(r'^/forget\s+(.+)$', text, re.IGNORECASE)
+    if narrow:
+        return narrow.group(1), False
+    fallback = re.match(r"forget (?:that )?(?:i said |about )?(.+)", text, re.IGNORECASE)
     if fallback:
-        return fallback.group(1)
-    return None
+        return fallback.group(1), False
+    return None, False
 
 def should_compact(all_memories) -> bool:
     return len(all_memories) > COMPACTION_THRESHOLD
