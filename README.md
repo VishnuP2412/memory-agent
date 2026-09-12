@@ -72,6 +72,9 @@ demo a finished product.
   development (multiple timeouts and 500s observed); a retry-with-
   backoff wrapper is in place, but sustained outages will still
   degrade the experience.
+- Deployed on Render's free tier, which uses ephemeral storage — stored
+  memories do not persist across service restarts or redeploys. A
+  production version would use a managed vector DB or persistent volume.
 
 ## Setup
 
@@ -80,5 +83,42 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 echo "NVIDIA_API_KEY=your_key_here" > .env
+python chat.py
+```
+
+## Usage
+
+The deployed service exposes a single API endpoint — there is no web
+chat interface. Interact with it via curl or any HTTP client:
+
+```bash
+curl -X POST https://agentic-memory-assistant.onrender.com/chat \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I really like hiking in the mountains"}'
+```
+
+To forget a topic:
+
+```bash
+curl -X POST https://agentic-memory-assistant.onrender.com/chat \
+  -H "Content-Type: application/json" \
+  -d '{"text": "/forget hiking"}'
+```
+
+or, to also catch closely related memories:
+
+```bash
+curl -X POST https://agentic-memory-assistant.onrender.com/chat \
+  -H "Content-Type: application/json" \
+  -d '{"text": "forget everything related to hiking"}'
+```
+
+Note: the free-tier instance sleeps after ~15 minutes of inactivity —
+the first request after idle time can take 30-60 seconds to respond
+while it wakes up.
+
+To run locally instead (interactive CLI, not the API):
+
+```bash
 python chat.py
 ```
