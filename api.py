@@ -1,8 +1,8 @@
 # api.py
 from fastapi import FastAPI
 from pydantic import BaseModel
-from memory_store import add_memory, search_memories, get_all_memories, delete_memories
-from retention import is_forget_command, is_question
+from memory_store import add_memory, search_memories, get_all_memories, delete_memories, is_question
+from retention import is_forget_command
 from llm_client import ask_llm
 
 app = FastAPI()
