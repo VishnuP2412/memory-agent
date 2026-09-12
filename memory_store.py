@@ -1,14 +1,27 @@
 import chromadb
-from sentence_transformers import SentenceTransformer
 import time
 import uuid
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
 
-_embedder = SentenceTransformer("all-MiniLM-L6-v2")
 _client = chromadb.PersistentClient(path="./chroma_db")
 _collection = _client.get_or_create_collection("memories")
 
+load_dotenv()
+
+_embed_client = OpenAI(
+    base_url="https://integrate.api.nvidia.com/v1",
+    api_key=os.environ["NVIDIA_API_KEY"],
+)
+
 def embed(text: str) -> list[float]:
-    return _embedder.encode(text).tolist()
+    response = _embed_client.embeddings.create(
+        input=[text],
+        model="nvidia/nemotron-3-embed-1b",
+    )
+    return response.data[0].embedding
+
 
 def add_memory(text: str, role: str) -> str:
     existing = get_all_memories()["documents"]
